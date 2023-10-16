@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Client</title>
+</head>
+<body>
+    <div id="messages"></div>
+    <script>
+        const socketUrl = 'ws://localhost:8080/ws';
+        let socket;
+        let connectionOpened = false;
+        let reconnectAttempts = 0;
+        let reconnectMessage = '';
+
+        function connect() {
+            socket = new WebSocket(socketUrl);
+
+            socket.addEventListener('open', (event) => {
+                console.log('WebSocket connection opened');
+                if (!connectionOpened) {
+                    document.getElementById('messages').innerHTML += 'WebSocket connection opened<br>';
+                    connectionOpened = true;
+                } else {
+                    document.getElementById('messages').innerHTML = document.getElementById('messages').innerHTML.replace(reconnectMessage, '');
+                    reconnectAttempts = 0;
+                }
+            });
+
+            socket.addEventListener('message', (event) => {
+                console.log(`Received message: ${event.data}`);
+                try {
+                    const json = JSON.parse(event.data);
+                    if (json.seconds !== undefined) {
+                        const seconds = json.seconds;
+                        const messagesDiv = document.getElementById('messages');
+                        if (messagesDiv.innerHTML.includes('Seconds since connection:')) {
+                            messagesDiv.innerHTML = messagesDiv.innerHTML.replace(/Seconds since connection: \d+/, `Seconds since connection: ${seconds}`);
+                        } else {
+                            messagesDiv.innerHTML += `<br>Seconds since connection: ${seconds}<br>`;
+                        }
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            });
+
+            socket.addEventListener('close', (event) => {
+                console.log('WebSocket connection closed');
+                if (reconnectAttempts < 10) {
+                    reconnectMessage = '<br>Connection lost! Trying to reconnect';
+                    for (let i = 0; i < reconnectAttempts; i++) {
+                        reconnectMessage += '.';
+                    }
+                    const messagesDiv = document.getElementById('messages');
+                    if (messagesDiv.innerHTML.includes('Connection lost! Trying to reconnect')) {
+                        messagesDiv.innerHTML = messagesDiv.innerHTML.replace(/<br>Connection lost! Trying to reconnect(\.{1,10})?/g, reconnectMessage);
+                    } else {
+                        messagesDiv.innerHTML += reconnectMessage;
+                    }
+                    setTimeout(() => {
+                        connect();
+                    }, 1000);
+                    reconnectAttempts++;
+                } else {
+                    document.getElementById('messages').innerHTML += '<br>Connection lost... unable to reconnect';
+                }
+            });
+        }
+
+        connect();
+
+        // Send a message to the server every second to request the seconds since connection
+        const intervalId = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send('refresh');
+            }
+        }, 1000);
+
+        // Remove all "Connection lost! Trying to reconnect" messages after reconnecting
+        socket.addEventListener('open', (event) => {
+            document.getElementById('messages').innerHTML = document.getElementById('messages').innerHTML.replace(/<br>Connection lost! Trying to reconnect(\.{1,10})?/g, '');
+        });
+    </script>
+</body>
+</html>
